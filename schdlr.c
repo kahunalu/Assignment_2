@@ -87,7 +87,6 @@ void * parse(char *argv[]){
 void * push(struct node* node, int train_num){
 	pthread_mutex_lock(&queue_mutex);
 	if(HIGH_EAST == node->train->priority){
-		printf("Train  #%d is ready to go East\n", train_num);
 
 		if(E_queue != NULL){
 			struct node *curr = E_queue;
@@ -102,7 +101,6 @@ void * push(struct node* node, int train_num){
 		}
 
 	}else if(LOW_EAST == node->train->priority){
-		printf("Train  #%d is ready to go East\n", train_num);
 
 		if(e_queue != NULL){
 			struct node *curr = e_queue;
@@ -117,7 +115,6 @@ void * push(struct node* node, int train_num){
 		}
 
 	}else if(HIGH_WEST == node->train->priority){
-		printf("Train  #%d is ready to go West\n", train_num);
 
 		if(W_queue != NULL){
 			struct node *curr = W_queue;
@@ -132,7 +129,6 @@ void * push(struct node* node, int train_num){
 		}
 
 	}else{
-		printf("Train  #%d is ready to go West\n", train_num);
 
 		if(w_queue != NULL){
 			struct node *curr = w_queue;
@@ -146,6 +142,9 @@ void * push(struct node* node, int train_num){
 			w_queue = node;
 		}
 	}
+
+	printf("Train  #%d is ready to go ", train_num);
+	printf("%s\n", node->train->direction);
 
 	pthread_cond_signal(&start_var);
 
@@ -193,43 +192,88 @@ void * load(void *train_number){
 	}
 }
 
+struct node * swap(struct node * curr){
+	struct node * temp = curr->next;
+	
+	int lowest_train_num = curr->train->num;
+	int loading_time = curr->train->loading_time;
+	
+	while(temp != NULL){
+		if(temp->train->num < lowest_train_num && temp->train->loading_time == loading_time){
+			lowest_train_num = temp->train->num;
+		}
+		temp = temp->next;
+	}
+
+	temp = curr;
+
+	if(temp->train->num == lowest_train_num){
+		return temp;
+	}else{
+		while(temp != NULL){
+			if(temp->next == NULL){
+				if(temp->train->loading_time == loading_time){
+					return temp;
+				}else{
+					return curr;
+				}
+			}else if(temp->next->train->num == lowest_train_num){
+				struct node * temp_2 = temp->next;
+				temp->next = temp_2->next;
+				temp_2->next = curr;
+				return temp_2;
+			}
+			temp = temp->next;
+		}
+	}
+}
+
 void * dispatch(){
 	while(TRAIN_CTR != MAX_TRAINS){
+		usleep(200000);
 		struct  node *curr = NULL;
 		char * direction;
-		
+				
 		if('0' == last_accross || 'E' == last_accross || 'e' == last_accross){
 			if(W_queue != NULL){
+				W_queue = swap(W_queue);
 				curr = W_queue;
 				W_queue = curr->next;
 				last_accross = 'W';
 			}else if(E_queue !=NULL){
+				E_queue = swap(E_queue);
 				curr = E_queue;
 				E_queue = curr->next;
 				last_accross = 'E';
 			}else if(w_queue !=NULL){
+				w_queue = swap(w_queue);
 				curr = w_queue;
 				w_queue = curr->next;
 				last_accross = 'w';
 			}else if(e_queue != NULL){
+				e_queue = swap(e_queue);
 				curr = e_queue;
 				e_queue = curr->next;
 				last_accross = 'e';
 			}
 		} else{
 			if(E_queue != NULL){
+				E_queue = swap(E_queue);
 				curr = E_queue;
 				E_queue = curr->next;
 				last_accross = 'E';
 			}else if(W_queue !=NULL){
+				W_queue = swap(W_queue);
 				curr = W_queue;
 				W_queue = curr->next;
 				last_accross = 'W';
 			}else if(e_queue !=NULL){
+				e_queue = swap(e_queue);
 				curr = e_queue;
 				e_queue = curr->next;
 				last_accross = 'e';
 			}else if(w_queue != NULL){
+				w_queue = swap(w_queue);
 				curr = w_queue;
 				w_queue = curr->next;
 				last_accross = 'w';
@@ -243,6 +287,7 @@ void * dispatch(){
 			TRAIN_CTR = TRAIN_CTR + 1;
 			pthread_mutex_unlock(&track_mutex);
 		}
+		
 	}
 }
 
