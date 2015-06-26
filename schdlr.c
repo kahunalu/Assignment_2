@@ -9,11 +9,13 @@
 #include <pthread.h>
 #include <unistd.h>
 
+// DEFINTIONS FOR DIRECTIONS
 #define HIGH_EAST 'E'
 #define LOW_EAST 'e'
 #define HIGH_WEST 'W'
 #define LOW_WEST 'w'
 
+// MUTEXES & CONDITION VARIABLES
 pthread_mutex_t load_mutex		= PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t  load_var		= PTHREAD_COND_INITIALIZER;
 
@@ -27,6 +29,7 @@ pthread_cond_t  start_var		= PTHREAD_COND_INITIALIZER;
 
 pthread_mutex_t track_mutex		= PTHREAD_MUTEX_INITIALIZER;
 
+//TRAIN STRUCTURE
 typedef struct{
 	pthread_t thread;
 	pthread_cond_t grant_var;
@@ -37,22 +40,26 @@ typedef struct{
 	char direction[4];
 } Train;
 
+//NODE STRUCTURE
 typedef struct node {
   Train *train;
   struct node *next;
 } node;
 
+//QUEUES
 struct node *head = NULL;
 struct node *e_queue = NULL;
 struct node *E_queue = NULL;
 struct node *w_queue = NULL;
 struct node *W_queue = NULL;
 
+//GLOBAL VARIABLES
 int MAX_TRAINS;
 int TRAIN_CTR = 0;
 int SECONDS = 0;
 int FIRST_TRAIN = 0;
 
+//TRACK TRACKER
 char last_accross = '0';
 
 /*	PARSE FUNCTION
@@ -92,6 +99,12 @@ void * parse(char *argv[]){
 		head=new_node;
 	}	
 }
+
+/*	PUSH FUNCTION
+
+	Pushes the train nodes to their corresponding queues
+
+*/
 
 void * push(struct node* node, int train_num){
 	pthread_mutex_lock(&queue_mutex);
@@ -158,64 +171,67 @@ void * push(struct node* node, int train_num){
 	printf("Train  #%d is ready to go ", train_num);
 	printf("%s\n", node->train->direction);
 
-	pthread_cond_signal(&start_var);
+	pthread_cond_signal(&start_var); //Signal the dispatcher that it may start  
 
 	pthread_mutex_unlock(&queue_mutex);
 }
 
-/*	LOAD FUNCTION
+/*	MAIN_TRAIN FUNCTION
 
-	Ensures the program is being executed correctly and if so creates the threads
-	for each train and appends them to a queue (linked list) and waits untill 
-	the first train has loaded to begin the dispatching function.
+	When a thread enters this function it loads (usleeps) for it's loading time, and then pushes itself
+	to it's correspoding queue and blocks itself on it's condition variable. 
+
+	The thread will unblock when signaled by the dispatcher and cross the main track (usleep) for
+	it's crossing time.
 
 */
 
-void * load(void *train_number){
+void * main_train(void *train_number){
     struct node *curr = head;
 
 	int train_num =*((int*)train_number);
 
-	while(curr) {
-		if(curr->train->num == train_num){
+	while(curr) {	// find threads corresponding train in the head queue
+		if(curr->train->num == train_num){	// once the train is found enter the load_mutex
 
 			pthread_mutex_lock(&load_mutex);
 
-			TRAIN_CTR = TRAIN_CTR + 1;
+			TRAIN_CTR = TRAIN_CTR + 1;		// increment the train counter
 			
-			if(TRAIN_CTR != MAX_TRAINS){			
+			if(TRAIN_CTR != MAX_TRAINS){	// wait till all trains - 1 are blocked on the load_var
 				pthread_cond_wait(&load_var, &load_mutex);
-			}else{
+			}else{							// signal all trains to begin loading once the last train enters
 				TRAIN_CTR = 0;
 				pthread_cond_broadcast(&load_var);
 			}
 
 			pthread_mutex_unlock(&load_mutex);
 			
-			usleep(curr->train->loading_time * 100000);
+			usleep(curr->train->loading_time * 100000);		// All trains begin "loading"
 
-			push(curr, train_num);
-			pthread_mutex_lock(&track_mutex);
+			push(curr, train_num);							// after loading push train onto corresponding queue
+			pthread_mutex_lock(&track_mutex);				// enter the main track mutex and block on corresponding train con_var
 			
 			pthread_cond_wait(&curr->train->grant_var, &track_mutex);
 			
-			if(FIRST_TRAIN == 0){
+			if(FIRST_TRAIN == 0){							// Used for print the timestamp
 				SECONDS = SECONDS + curr->train->loading_time;
 				FIRST_TRAIN = 1;
 			}
 
-			printf("%02d:", (SECONDS/(60 * 60))); //hours
- 			printf("%02d:", SECONDS/600); //minutes
- 			printf("%02d.", ((SECONDS/10)%60)); //seconds
- 			printf("%d ", SECONDS%10); //tenths
+			printf("%02d:", (SECONDS/(600 * 60))); 
+ 			printf("%02d:", ((SECONDS/600)%600));
+ 			printf("%02d.", ((SECONDS/10)%60));
+ 			printf("%d ", SECONDS%10);
+
 			printf("Train  #%d is ON the main track going ", train_num);
 			printf("%s\n", curr->train->direction);
-			usleep(curr->train->crossing_time * 100000);
+			usleep(curr->train->crossing_time * 100000);	// Train is "Crossing the track"
 			pthread_cond_signal(&dispatch_var);	
 			
 			SECONDS = SECONDS + curr->train->crossing_time;
- 			printf("%02d:", (SECONDS/(60 * 60))); //hours
- 			printf("%02d:", SECONDS/600); //minutes
+ 			printf("%02d:", (SECONDS/(600 * 60))); //hours
+ 			printf("%02d:", ((SECONDS/600)%600)); //minutes
  			printf("%02d.", ((SECONDS/10)%60)); //seconds
  			printf("%d ", SECONDS%10); //tenths
 			
@@ -229,6 +245,13 @@ void * load(void *train_number){
 		}
 	}
 }
+
+/*	SWAP FUNCTION
+
+	Swap takes the current node and checks if there is train in the node's queue that has the same loading time
+	but a lower number. If so it takes the place of the original node and returns itself. If not the original node returns.
+
+*/
 
 struct node * swap(struct node * curr){
 	struct node * temp = curr->next;
@@ -266,15 +289,22 @@ struct node * swap(struct node * curr){
 	}
 }
 
+/*	DISPATCH FUNCTION
+
+	Dispatch loops untill all trains have crossed the main track, comparing the heads of all
+	station queues and pops the head off and runs that train accross the main track	
+
+*/
+
 void * dispatch(){
 	while(TRAIN_CTR != MAX_TRAINS){
-		usleep(200000);
+		usleep(200000); 	// Adds a jitter to the dispatcher to avoid small race conditions with the usleep
 		struct  node *curr = NULL;
 		char * direction;
 				
-		if('0' == last_accross || 'E' == last_accross || 'e' == last_accross){
+		if('0' == last_accross || 'E' == last_accross || 'e' == last_accross){	// Handles the back and forth of the main track
 			if(W_queue != NULL){
-				W_queue = swap(W_queue);
+				W_queue = swap(W_queue); // runs the swap function to ensre the head of the function is the train with the lowest #
 				curr = W_queue;
 				W_queue = curr->next;
 				last_accross = 'W';
@@ -318,7 +348,8 @@ void * dispatch(){
 			}
 		}
 
-		if(curr){
+		if(curr){	// If a train has been selected to cross the track block on
+					// the condition variable untill finished crossing and increment the train counter
 			pthread_mutex_lock(&track_mutex);
 			pthread_cond_signal(&curr->train->grant_var);
 			pthread_cond_wait(&dispatch_var, &track_mutex);
@@ -345,8 +376,8 @@ int main(int argc, char *argv[]) {
 		struct node *curr = head; 	// points to the head queue
 		
 		while(curr) {				// create thread for each train in the head queue 
-									// and enter the load function with the threads corresponding train number
-			pthread_create(&curr->train->thread, NULL, load, (void *) &curr->train->num); 
+									// and enter the main_train function with the threads corresponding train number
+			pthread_create(&curr->train->thread, NULL, main_train, (void *) &curr->train->num); 
 			curr = curr->next;
 		}
 		
