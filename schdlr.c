@@ -314,6 +314,14 @@ void * dispatch(){
 	}
 }
 
+/*	MAIN FUNCTION
+
+	Ensures the program is being executed correctly and if so creates the threads
+	for each train and appends them to a queue (linked list) and waits untill 
+	the first train has loaded to begin the dispatching function.
+
+*/
+
 int main(int argc, char *argv[]) {
 
 	if(argc == 3){
