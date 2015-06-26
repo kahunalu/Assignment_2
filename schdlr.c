@@ -144,7 +144,10 @@ void * push(struct node* node, int train_num){
 			w_queue = node;
 		}
 	}
-	printf("%d ", node->train->loading_time);
+	printf("%02d:", (node->train->loading_time/(60 * 60))); //hours
+	printf("%02d:", node->train->loading_time/600); //minutes
+	printf("%02d.", ((node->train->loading_time/10)%60)); //seconds
+	printf("%d ", node->train->loading_time%10); //tenths
 	printf("Train  #%d is ready to go ", train_num);
 	printf("%s\n", node->train->direction);
 
@@ -180,17 +183,27 @@ void * load(void *train_number){
 			pthread_mutex_lock(&track_mutex);
 			
 			pthread_cond_wait(&curr->train->grant_var, &track_mutex);
+			
 			if(FIRST_TRAIN == 0){
 				SECONDS = SECONDS + curr->train->loading_time;
 				FIRST_TRAIN = 1;
 			}
-			printf("%d ", SECONDS);
+
+			printf("%02d:", (SECONDS/(60 * 60))); //hours
+ 			printf("%02d:", SECONDS/600); //minutes
+ 			printf("%02d.", ((SECONDS/10)%60)); //seconds
+ 			printf("%d ", SECONDS%10); //tenths
 			printf("Train  #%d is ON the main track going ", train_num);
 			printf("%s\n", curr->train->direction);
 			usleep(curr->train->crossing_time * 100000);
 			pthread_cond_signal(&dispatch_var);	
+			
 			SECONDS = SECONDS + curr->train->crossing_time;
- 			printf("%d ", SECONDS);
+ 			printf("%02d:", (SECONDS/(60 * 60))); //hours
+ 			printf("%02d:", SECONDS/600); //minutes
+ 			printf("%02d.", ((SECONDS/10)%60)); //seconds
+ 			printf("%d ", SECONDS%10); //tenths
+			
 			printf("Train  #%d is OFF the main track after going ", train_num);
 			printf("%s\n", curr->train->direction);
 			pthread_mutex_unlock(&track_mutex);
