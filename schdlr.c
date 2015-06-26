@@ -55,15 +55,22 @@ int FIRST_TRAIN = 0;
 
 char last_accross = '0';
 
+/*	PARSE FUNCTION
+
+	Parses the input file, creating a node for each train that contains a train struct.
+	The node is then pushed onto the queue
+	
+*/
+
 void * parse(char *argv[]){
-	FILE *train_info = fopen(argv[1], "r");
+	FILE *train_info = fopen(argv[1], "r"); 		//open train file
 	char buff[255];
 
 	int train_number = 0;
 
-	sscanf((char *)argv[2],"%d",&MAX_TRAINS);
+	sscanf((char *)argv[2],"%d",&MAX_TRAINS);		//set MAX_TRAINS to the correct argument
 
-	while(fscanf(train_info, "%s", buff) != EOF){
+	while(fscanf(train_info, "%s", buff) != EOF){	// Initialize a node and train struct for each 
 		struct node *new_node = (struct node*)malloc(sizeof(struct node*));
 		Train *train = malloc(sizeof(Train));
 		
@@ -80,7 +87,7 @@ void * parse(char *argv[]){
 		sscanf(strtok(NULL, ",:"),"%d",&train->loading_time);
 		sscanf(strtok(NULL, ",:"),"%d",&train->crossing_time);
 		
-		new_node->train = train;
+		new_node->train = train; 					//Append each train to the head queue
 		new_node->next = head;
 		head=new_node;
 	}	
@@ -155,6 +162,14 @@ void * push(struct node* node, int train_num){
 
 	pthread_mutex_unlock(&queue_mutex);
 }
+
+/*	LOAD FUNCTION
+
+	Ensures the program is being executed correctly and if so creates the threads
+	for each train and appends them to a queue (linked list) and waits untill 
+	the first train has loaded to begin the dispatching function.
+
+*/
 
 void * load(void *train_number){
     struct node *curr = head;
@@ -325,19 +340,21 @@ void * dispatch(){
 int main(int argc, char *argv[]) {
 
 	if(argc == 3){
-		parse(argv);
+		parse(argv); 				// function to parse the input file, takes arguments
 
-		struct node *curr = head;
-		while(curr) {
-			pthread_create(&curr->train->thread, NULL, load, (void *) &curr->train->num);
+		struct node *curr = head; 	// points to the head queue
+		
+		while(curr) {				// create thread for each train in the head queue 
+									// and enter the load function with the threads corresponding train number
+			pthread_create(&curr->train->thread, NULL, load, (void *) &curr->train->num); 
 			curr = curr->next;
 		}
 		
 		pthread_mutex_lock(&start_mutex);
-		pthread_cond_wait(&start_var, &start_mutex);
+		pthread_cond_wait(&start_var, &start_mutex); // Wait for first train to finish loading
 		pthread_mutex_unlock(&start_mutex);
 
-		dispatch();
+		dispatch(); // Begin to dispatch
 
 	}else{
 		printf("Usage: ./schdlr <train_file> <#_of_trains>\n");
